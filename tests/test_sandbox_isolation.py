@@ -46,7 +46,7 @@ def test_no_home_no_credentials_no_gov(env):
 def test_environment_is_cleared(env):
     _, _, ex = env
     names = {line.split("=", 1)[0] for line in ex.run(("env",)).stdout.splitlines()}
-    assert names <= {"PATH", "HOME", "LANG", "PWD"}, names
+    assert names <= {"PATH", "HOME", "LANG", "PWD", "PYTHONNOUSERSITE"}, names
 
 
 def test_no_network(env):

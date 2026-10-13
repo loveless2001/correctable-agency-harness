@@ -97,7 +97,7 @@ def main() -> None:
     p.add_argument("--max-steps", type=int, default=20)
     p.add_argument("--temperature", type=float, default=0.7)
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--max-tokens", type=int, default=4096)
+    p.add_argument("--max-tokens", type=int, default=2048)  # keeps one call well under Modal's 150 s request cap
     p.add_argument("--limit", type=int, default=0, help="first N episodes only")
     p.add_argument("--pair-glob", default="*", help="only pairs matching this glob, e.g. '*-00' for the smoke")
     p.add_argument("--workers", type=int, default=1)
@@ -118,14 +118,14 @@ def main() -> None:
         print(f"spend so far in this run dir: ${guard.spent_usd():.2f}; cap ${args.cap_usd:.2f}", flush=True)
         if not guard.allow_start():
             raise SystemExit("billing guard: no budget left for this run directory")
-        print(f"endpoint ready after {wait_until_ready(args.base_url, heartbeat=guard.heartbeat):.0f} s", flush=True)
+        print(f"endpoint ready after {wait_until_ready(args.base_url, budget_ok=guard.allow_call):.0f} s", flush=True)
     sampling = Sampling(args.temperature, max_tokens=args.max_tokens, seed=args.seed)
     try:
         run_grid(specs, args.arms.split(","), args.out, _provider(args, allow_call), sampling, None, args.max_steps,
                  args.workers, allow_start, require_kernel_check=paid)
     finally:
         if guard:
-            guard.heartbeat()
+            guard.close()
             print(f"projected spend incl. idle window: ${guard.projected_usd(reserve=False):.2f}", flush=True)
     report = aggregate(load_outcomes(args.out))
     (args.out / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True))
