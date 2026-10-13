@@ -106,3 +106,11 @@ def test_log_detects_edit_delete_reorder(tmp_path):
     p.write_text(original)
     _rewrite(p, lambda ls: [ls[0], ls[2], ls[1], ls[3]])  # swap 2 and 3
     assert log.verify() == (False, 3)
+
+
+def test_log_survives_lone_surrogates(tmp_path):
+    log = HashChainedEventLog(tmp_path / "h.jsonl")
+    log.append("model_output", ACTOR, {"text": "bad \ud800 text", "args": ["\udfff"]})
+    ev = next(log.events())
+    assert "\ufffd" in ev.payload["text"] or "?" in ev.payload["text"]
+    assert log.verify() == (True, None)

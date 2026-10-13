@@ -31,6 +31,18 @@ class Event:
     hash: str
 
 
+def _clean(obj):
+    """Make every string encodable (a lone surrogate from a model becomes U+FFFD) so an
+    append can never fail on odd model text; the stored text is what was hashed."""
+    if isinstance(obj, str):
+        return obj.encode("utf-8", "replace").decode("utf-8")
+    if isinstance(obj, dict):
+        return {_clean(k): _clean(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_clean(v) for v in obj]
+    return obj
+
+
 def _event_hash(fields: dict) -> str:
     return sha256_hex({k: v for k, v in fields.items() if k != "hash"})
 
@@ -59,7 +71,7 @@ class HashChainedEventLog:
             try:
                 seq, prev = self._tail()
                 fields = {"seq": seq + 1, "ts": self._clock(), "kind": kind, "source": prov.source.value,
-                          "ref": prov.ref, "payload": payload, "prev_hash": prev}
+                          "ref": _clean(prov.ref), "payload": _clean(payload), "prev_hash": prev}
                 fields["hash"] = _event_hash(fields)
                 f.write(json.dumps(fields, sort_keys=True, ensure_ascii=False) + "\n")
                 f.flush()
