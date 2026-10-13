@@ -27,8 +27,8 @@ Research harness and benchmark for **Correctable Agency**: can an agent accept l
   - `bend PROOF.bend` is the proof gate.
   - `bend PROOF.bend --verdict` re-checks with the Lean-proven kernel (needs Lean 4.34 via elan).
 - `references/`: the source paper.
-- `plans/`: phase plans, the prereg and reports.
-- `docs/`: project docs.
+- `plans/`: phase plans, the prereg and reports. Current plan: `plans/261014-0122-phase-0-harness-and-pilot/plan.md`.
+- `docs/system-architecture.md`: process topology, module layout, memory design, leaky arm, invariants.
 
 ## Status
 
