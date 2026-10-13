@@ -15,7 +15,7 @@ Architecture: [docs/system-architecture.md](../../docs/system-architecture.md) Â
 | # | Phase | Status |
 |---|---|---|
 | 1 | [Core types, governance store, history log](phase-01-core-governance-history.md) | done (0d6c09c, 8 tests) |
-| 2 | [Broker + Bend policy](phase-02-broker-and-bend-policy.md) | done (fc989e1), `--verdict` pending Lean download |
+| 2 | [Broker + Bend policy](phase-02-broker-and-bend-policy.md) | done (fc989e1); `--verdict` ALL PROOFS CHECK (Lean 4.34.0) |
 | 3 | [Executor sandbox + leaky switch](phase-03-executor-sandbox.md) | done (bwrap; leak = hardlink; docker deferred, YAGNI) |
 | 4 | [Memory: summary tree + luna](phase-04-memory-summary-tree.md) | done (lazy fold, provenance meet, fallback; 1 real luna call: 6.9 s, 447 B) |
 | 5 | [Model gateway + actor loop](phase-05-models-and-actor-loop.md) | todo |
