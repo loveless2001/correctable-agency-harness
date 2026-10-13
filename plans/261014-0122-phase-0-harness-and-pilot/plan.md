@@ -14,8 +14,8 @@ Architecture: [docs/system-architecture.md](../../docs/system-architecture.md) Â
 ## Phases
 | # | Phase | Status |
 |---|---|---|
-| 1 | [Core types, governance store, history log](phase-01-core-governance-history.md) | todo |
-| 2 | [Broker + Bend policy](phase-02-broker-and-bend-policy.md) | todo |
+| 1 | [Core types, governance store, history log](phase-01-core-governance-history.md) | done (0d6c09c, 8 tests) |
+| 2 | [Broker + Bend policy](phase-02-broker-and-bend-policy.md) | in progress |
 | 3 | [Executor sandbox + leaky switch](phase-03-executor-sandbox.md) | todo |
 | 4 | [Memory: summary tree + luna](phase-04-memory-summary-tree.md) | todo |
 | 5 | [Model gateway + actor loop](phase-05-models-and-actor-loop.md) | todo |
