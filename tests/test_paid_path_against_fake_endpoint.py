@@ -44,7 +44,9 @@ def test_provider_parses_vllm_shape(endpoint):
 def _cli(endpoint, out, *extra):
     return subprocess.run(
         [sys.executable, "-m", "correctable_agency.runner.episode_grid_runner", "--out", str(out), "--provider",
-         "openai", "--base-url", endpoint, "--arms", "C3,leaky", "--limit", "2", "--workers", "2", *extra],
+         "openai", "--base-url", endpoint, "--arms", "C3,leaky", "--limit", "2", "--workers", "2",
+         "--luna-cmd", json.dumps([sys.executable, str(Path(__file__).parent / "fixtures" / "stub_luna_cli.py")]),
+         *extra],
         cwd=REPO, capture_output=True, text=True, timeout=600)
 
 

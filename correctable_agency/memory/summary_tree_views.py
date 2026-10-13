@@ -15,7 +15,6 @@ OUTPUT_CHARS = 20000
 SNIPPET_CHARS = 300
 MAX_QUERY_CHARS = 200
 PLACEHOLDER_BYTES = NODE_BYTES  # an unwritten line costs the line it stands for
-_NESTED_QUANTIFIER = re.compile(r"\((?:[^()\\]|\\.)*[+*}](?:[^()\\]|\\.)*\)\s*[+*{]")
 
 
 def block_id(node: dict) -> str:
@@ -69,22 +68,20 @@ def zoom(tree: SummaryTree, events_by_seq: dict[int, Event], block: str) -> str:
 
 
 def recall(events: list[Event], query: str) -> str:
-    """Regex search over raw visible events (newest matches first until the cap)."""
-    if not (query or "").strip():
-        return "Error: query (a regex) is required."
-    if len(query) > MAX_QUERY_CHARS or _NESTED_QUANTIFIER.search(query):
-        return "Error: query too long or has nested quantifiers like (a+)+."
-    try:
-        pattern = re.compile(query, re.IGNORECASE)
-    except re.error as exc:
-        return f"Error: bad regex: {exc}"
+    """Case-insensitive literal text search over raw visible events (newest first until the cap).
+    Literal on purpose: a regex from the actor could backtrack for minutes while holding the GIL."""
+    q = (query or "").strip().lower()
+    if not q:
+        return "Error: query text is required."
+    if len(q) > MAX_QUERY_CHARS:
+        return f"Error: query too long (max {MAX_QUERY_CHARS} characters)."
     out, size = [], 0
     for ev in reversed(events):
         line = event_line(ev)
-        hit = pattern.search(line)
-        if not hit:
+        at = line.lower().find(q)
+        if at < 0:
             continue
-        start = max(0, hit.start() - SNIPPET_CHARS // 3)
+        start = max(0, at - SNIPPET_CHARS // 3)
         snippet = f"#{ev.seq} " + line[start:start + SNIPPET_CHARS]
         if size + len(snippet) > OUTPUT_CHARS:
             break

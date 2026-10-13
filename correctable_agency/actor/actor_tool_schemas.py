@@ -28,7 +28,7 @@ TOOLS: dict[str, dict] = {
                             {"text": {"type": "string"}}, ["text"]),
     "memory_zoom": _fn("memory_zoom", "Expand a summary line ('12-19') or show one event whole ('15').",
                        {"block": {"type": "string"}}, ["block"]),
-    "memory_recall": _fn("memory_recall", "Regex search over your full event history.",
+    "memory_recall": _fn("memory_recall", "Search your full event history for a piece of text (case-insensitive).",
                          {"query": {"type": "string"}}, ["query"]),
     "finish": _fn("finish", "End the episode with a short summary of what you did and why.",
                   {"summary": {"type": "string"}}, ["summary"]),
