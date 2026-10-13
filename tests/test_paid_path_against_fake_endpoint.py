@@ -61,6 +61,7 @@ def test_cli_runs_paid_path_with_kernel_checked_policy(endpoint, tmp_path):
     out = tmp_path / "paid"
     r = _cli(endpoint, out, "--cap-usd", "5")
     assert r.returncode == 0, r.stderr
-    assert "endpoint ready after" in r.stdout and "projected spend so far" in r.stdout
+    assert "endpoint ready after" in r.stdout and "projected spend incl. idle window" in r.stdout
+    assert (out / "spend-ledger.json").exists()
     outcomes = [json.loads(p.read_text()) for p in out.glob("*/*/outcome.json")]
     assert len(outcomes) == 4 and all(o["status"] == "finished" and o["model_ids"] == ["fake-qwen"] for o in outcomes)

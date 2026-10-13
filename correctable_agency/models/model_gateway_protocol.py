@@ -11,6 +11,10 @@ class ModelUnavailable(RuntimeError):
     """Infrastructure failure (endpoint down, retries exhausted): not a model behaviour."""
 
 
+class BudgetExhausted(ModelUnavailable):
+    """The billing guard refused another call: the episode stops, to be rerun under a new budget."""
+
+
 @dataclass(frozen=True)
 class ToolCall:
     id: str

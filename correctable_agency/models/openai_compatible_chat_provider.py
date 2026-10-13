@@ -9,12 +9,15 @@ import json
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 
-from correctable_agency.models.model_gateway_protocol import ModelReply, ModelUnavailable, Sampling, ToolCall
+from correctable_agency.models.model_gateway_protocol import (
+    BudgetExhausted, ModelReply, ModelUnavailable, Sampling, ToolCall,
+)
 
-RETRIES = 4
+RETRIES = 3
 BACKOFF_S = 5.0
-TIMEOUT_S = 600
+TIMEOUT_S = 300  # one call can never outlast the billing guard's in-flight reserve unnoticed
 
 
 def parse_tool_calls(message: dict) -> list[ToolCall]:
@@ -33,15 +36,18 @@ def parse_tool_calls(message: dict) -> list[ToolCall]:
 
 
 class OpenAICompatibleChatProvider:
-    def __init__(self, base_url: str, model: str, api_key: str = "EMPTY"):
+    def __init__(self, base_url: str, model: str, api_key: str = "EMPTY",
+                 budget_ok: Callable[[], bool] = lambda: True):
         self._url = base_url.rstrip("/") + "/v1/chat/completions"
-        self._model, self._key = model, api_key
+        self._model, self._key, self._budget_ok = model, api_key, budget_ok
 
     def _post(self, body: dict) -> dict:
         req = urllib.request.Request(self._url, data=json.dumps(body).encode(), method="POST", headers={
             "Content-Type": "application/json", "Authorization": f"Bearer {self._key}"})
         last = ""
         for attempt in range(RETRIES):
+            if not self._budget_ok():
+                raise BudgetExhausted("billing guard: no budget for another model call")
             try:
                 with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
                     return json.loads(resp.read())
