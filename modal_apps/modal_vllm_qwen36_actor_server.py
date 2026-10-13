@@ -93,6 +93,7 @@ def _vllm_cmd() -> list[str]:
     gpu=f"{GPU}:{N_GPU}",
     scaledown_window=10 * MINUTES,
     timeout=20 * MINUTES,
+    max_containers=1,  # billing guard: never scale out to a second 2xA100 container
     volumes={
         "/root/.cache/huggingface": hf_cache_vol,
         "/root/.cache/vllm": vllm_cache_vol,
