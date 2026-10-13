@@ -59,6 +59,9 @@ class GovernanceStateStore:
         row = self._db.execute("SELECT rights FROM authority WHERE principal=?", (principal,)).fetchone()
         return AuthorityGrant(principal, frozenset(json.loads(row[0]))) if row else None
 
+    def principals(self) -> list[str]:
+        return [r[0] for r in self._db.execute("SELECT principal FROM authority ORDER BY principal")]
+
     def has_right(self, principal: str, right: str) -> bool:
         g = self.grant(principal)
         return g is not None and right in g.rights

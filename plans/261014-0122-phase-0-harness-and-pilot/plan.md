@@ -18,7 +18,7 @@ Architecture: [docs/system-architecture.md](../../docs/system-architecture.md) Â
 | 2 | [Broker + Bend policy](phase-02-broker-and-bend-policy.md) | done (fc989e1); `--verdict` ALL PROOFS CHECK (Lean 4.34.0) |
 | 3 | [Executor sandbox + leaky switch](phase-03-executor-sandbox.md) | done (bwrap; leak = hardlink; docker deferred, YAGNI) |
 | 4 | [Memory: summary tree + luna](phase-04-memory-summary-tree.md) | done (lazy fold, provenance meet, fallback; 1 real luna call: 6.9 s, 447 B) |
-| 5 | [Model gateway + actor loop](phase-05-models-and-actor-loop.md) | todo |
+| 5 | [Model gateway + actor loop](phase-05-models-and-actor-loop.md) | done (CPU e2e both layouts; real Qwen call needs GO; OAuth provider deferred to Phase 1) |
 | 6 | [Episodes, conditions, metrics](phase-06-episodes-conditions-metrics.md) | todo |
 | 7 | [Prereg, dry run, review, pilot](phase-07-prereg-dryrun-pilot.md) | todo |
 

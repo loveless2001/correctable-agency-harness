@@ -5,6 +5,7 @@
 - Older events are shown as the fold of the summary tree within `summary_bytes`.
 - Compression is lazy and in history order: only nodes the fold wants to show
   get written, so short episodes make no luna calls at all.
+- With summarize=False (stateless arm C0), older events simply drop out of view.
 - If luna fails, a node gets a deterministic fallback line (marked) and an
   `audit_memory_fallback` event is logged, so the run continues (memory is
   best-effort; only science/billing guards stop runs).
@@ -29,8 +30,8 @@ def visible(ev: Event) -> bool:
 
 class EpisodeMemory:
     def __init__(self, log: HashChainedEventLog, tree_path: Path | None, compressor: LunaCompressor,
-                 summary_bytes: int = 8000, recent_bytes: int = 24000):
-        self._log, self._compressor = log, compressor
+                 summary_bytes: int = 8000, recent_bytes: int = 24000, summarize: bool = True):
+        self._log, self._compressor, self._summarize = log, compressor, summarize
         self.tree = SummaryTree(tree_path)
         self._summary_bytes, self._recent_bytes = summary_bytes, recent_bytes
 
@@ -84,11 +85,13 @@ class EpisodeMemory:
         self.tree.sync(events)
         by_seq = {ev.seq: ev for ev in events}
         split = self._split(events)
+        recent = [f"#{ev.seq} " + event_line(ev)[:RECENT_EVENT_CHARS] for ev in events[split:]]
+        if not self._summarize:
+            return [], ([f"({split} earlier events are no longer in view)"] if split else []) + recent
         while True:
             parts = fold_parts(self.tree, split, self._summary_bytes)
             missing = [(k, j) for k, j in parts if self.tree.levels[k][j]["text"] is None]
             if not missing:
                 break
             self._write(*missing[0], by_seq)
-        recent = [f"#{ev.seq} " + event_line(ev)[:RECENT_EVENT_CHARS] for ev in events[split:]]
         return render_parts(self.tree, parts), recent
