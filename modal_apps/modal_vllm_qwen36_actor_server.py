@@ -32,10 +32,10 @@ FAST_BOOT = os.environ.get("FAST_BOOT", "1") != "0"
 LANGUAGE_MODEL_ONLY = os.environ.get("LANGUAGE_MODEL_ONLY", "1") == "1"
 GDN_PREFILL_BACKEND = os.environ.get("GDN_PREFILL_BACKEND", "triton")
 
-# Share the cached weights volume with the codex deploy (same model) so this
-# endpoint does not re-download Qwen3.6-27B.
-hf_cache_vol = modal.Volume.from_name("drylab-huggingface-cache", create_if_missing=True)
-vllm_cache_vol = modal.Volume.from_name("drylab-vllm-cache", create_if_missing=True)
+# Own volumes (no runtime dependency on drylab's Modal resources). The first
+# boot downloads Qwen3.6-27B into them; later boots reuse the cache.
+hf_cache_vol = modal.Volume.from_name("correctable-agency-huggingface-cache", create_if_missing=True)
+vllm_cache_vol = modal.Volume.from_name("correctable-agency-vllm-cache", create_if_missing=True)
 
 vllm_image = (
     modal.Image.from_registry(
