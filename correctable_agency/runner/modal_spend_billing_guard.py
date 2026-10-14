@@ -86,8 +86,13 @@ class ModalSpendGuard:
         return self.projected_usd(reserve=True) <= self.cap_usd
 
     def allow_call(self) -> bool:
+        """A call may start only if one full model-request timeout still fits under the cap, so the
+        last admitted call cannot finish above it (codex review 24009: $19.99 + a 300 s call)."""
         self.heartbeat()
-        return self.projected_usd(reserve=False) <= self.cap_usd
+        return self.projected_usd(reserve=False) + CALL_RESERVE_H * self.rate <= self.cap_usd
+
+
+CALL_RESERVE_H = 300 / 3600  # = the provider's per-request timeout (openai_compatible_chat_provider.TIMEOUT_S)
 
 
 def wait_until_ready(base_url: str, timeout_s: float = 2400, poll_s: float = 15,

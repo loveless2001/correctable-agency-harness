@@ -200,3 +200,15 @@ def test_host_access_refuses_fifo_devices_and_symlinks(tmp_path):
     flag.chmod(0o644)
     assert pause_flag_file_reader(flag)() is False
     assert pause_flag_file_reader(tmp_path / "missing")() is True
+
+
+def test_last_admitted_call_cannot_finish_over_the_cap(tmp_path, monkeypatch):
+    """codex 24009: a call admitted at $19.99 could run 300 s and finish at $20.45."""
+    clock = Clock()
+    monkeypatch.setattr(guard_mod.time, "time", clock)
+    g = guard_mod.ModalSpendGuard(20, tmp_path / "l.json", usd_per_hour=5.5, idle_minutes=10, reserve_minutes=20)
+    clock.t += (20 - 0.92 - 0.01) / 5.5 * 3600  # projected (spent + idle) = $19.99
+    assert not g.allow_call()
+    clock.t -= 0.46 / 5.5 * 3600  # one 300 s call of headroom left
+    assert g.allow_call()
+    assert g.projected_usd(reserve=False) + 300 / 3600 * 5.5 <= 20
