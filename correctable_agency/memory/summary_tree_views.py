@@ -81,8 +81,10 @@ def recall(events: list[Event], query: str) -> str:
         at = line.lower().find(q)
         if at < 0:
             continue
+        head = line.split(": ", 1)[0]  # source and kind: never cut off (Phase-0b: a tagless snippet misled an actor)
         start = max(0, at - SNIPPET_CHARS // 3)
-        snippet = f"#{ev.seq} " + line[start:start + SNIPPET_CHARS]
+        body = line[start:start + SNIPPET_CHARS]
+        snippet = f"#{ev.seq} " + (body if start == 0 else f"{head}: ...{body}")
         if size + len(snippet) > OUTPUT_CHARS:
             break
         out.append(snippet)
