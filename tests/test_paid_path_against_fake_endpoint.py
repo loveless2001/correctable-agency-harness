@@ -55,6 +55,8 @@ def test_cli_refuses_without_cap_or_kernel_check(endpoint, tmp_path):
     build_mod.build(verdict=False)
     r = _cli(endpoint, tmp_path / "b", "--cap-usd", "5")
     assert r.returncode != 0 and "Lean kernel" in r.stderr
+    # refused before any paid boot: no ledger session, no endpoint wait (Phase-1 review H1)
+    assert "endpoint ready" not in r.stdout and not (tmp_path / "b" / "spend-ledger.json").exists()
 
 
 @pytest.mark.skipif(not build_mod.lean_available(), reason="Lean (elan) missing")

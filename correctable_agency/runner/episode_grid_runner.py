@@ -21,6 +21,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 from correctable_agency.broker.bend_policy_bridge import BendPolicyBridge
+from correctable_agency.broker.bend_policy_build import MANIFEST
 from correctable_agency.conditions.condition_arms import ARMS
 from correctable_agency.episodes.episode_spec import EpisodeSpec, load_specs
 from correctable_agency.governance.signed_operator_channel import load_or_create_key
@@ -69,8 +70,15 @@ def run_grid(specs: list[EpisodeSpec], arm_names: list[str], out: Path, provider
             prev = _previous(run_dir)
             attempt = prev.get("attempt", 1) + 1 if prev.get("status") == "infra_error" else 1
             shutil.rmtree(run_dir, ignore_errors=True)
-            result = run_episode(spec, ARMS[arm_name], run_dir, provider, sampling, bridge, key,
-                                 LunaCompressor(compressor_cmd), max_steps, deadline_s)
+            try:
+                result = run_episode(spec, ARMS[arm_name], run_dir, provider, sampling, bridge, key,
+                                     LunaCompressor(compressor_cmd), max_steps, deadline_s)
+            except Exception as e:  # noqa: BLE001 - one episode's harness fault must not stop a paid grid
+                run_dir.mkdir(parents=True, exist_ok=True)
+                result = {"episode": spec.id, "pair": spec.pair, "dimension": spec.dimension, "variant": spec.variant,
+                          "arm": arm_name, "status": "infra_error", "steps": 0, "chain_ok": False, "metrics": {},
+                          "labels": {}, "model_calls": 0, "memory_fallbacks": 0, "length_truncations": 0,
+                          "max_call_latency_s": 0.0, "detail": f"harness exception: {type(e).__name__}: {e}"[:2000]}
             result["attempt"] = attempt
             (run_dir / "outcome.json").write_text(json.dumps(result, indent=2, sort_keys=True))
             return result
@@ -91,7 +99,7 @@ def run_grid(specs: list[EpisodeSpec], arm_names: list[str], out: Path, provider
                 return results
             done, pending = wait(pending, return_when=FIRST_COMPLETED)
             for f in done:
-                r = f.result()  # a harness exception stops the grid loudly
+                r = f.result()  # one() contains episode faults; anything left here is a runner bug
                 results.append(r)
                 print(f"[{len(results)}] {r['arm']}/{r['episode']}: {r['status']} steps={r['steps']}", flush=True)
 
@@ -133,6 +141,10 @@ def main() -> None:
     if paid:
         if args.cap_usd <= 0:
             raise SystemExit("--cap-usd is required for a paid provider")
+        # before any paid boot (Phase-1 review H1): pytest leaves the manifest unchecked
+        manifest = json.loads(MANIFEST.read_text()) if MANIFEST.exists() else {}
+        if not manifest.get("verdict_kernel_checked"):
+            raise SystemExit("policy was not rechecked by the Lean kernel: run bend_policy_build --verdict first")
         # Memory arms depend on luna: check it works before paying for a GPU boot.
         if LunaCompressor(luna_cmd).compress("Reply with exactly this line: ok") is None:
             raise SystemExit("luna preflight failed: memory arms would silently degrade")
