@@ -52,7 +52,11 @@ class OpenAICompatibleChatProvider:
                 with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
                     return json.loads(resp.read())
             except urllib.error.HTTPError as e:
-                last = f"HTTP {e.code}: {e.read()[:300]!r}"
+                try:
+                    body = e.read()[:300]
+                except Exception:  # the error body is diagnostic only; a reset while reading it stays transient
+                    body = b"<unreadable>"
+                last = f"HTTP {e.code}: {body!r}"
                 if e.code < 500 and e.code != 429:
                     raise ModelUnavailable(last) from e
             except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
