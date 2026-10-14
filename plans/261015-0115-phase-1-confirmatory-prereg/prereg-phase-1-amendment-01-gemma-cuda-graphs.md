@@ -19,3 +19,8 @@
 - Latency: p50 14.8 s, p90 35 s, max 65 s (0c eager: 32.9 / 94 / 172 s).
 - Tool-call parse errors: 0. Truncations: 1 of 194 calls. Harness exceptions: 0.
 - **Decision: CUDA graphs are kept for all Phase-1 Gemma episodes.** It is a single configuration with no mixing; the eager fallback was not needed. Expected Gemma cost drops from ≈ $75 to ≈ $25–30.
+
+## Addendum: Qwen cap (02:25)
+- Qwen's smoke cost $5.13 for 50 episodes, which projects to ≈ $38 for 560, against a start-stop threshold of ≈ $37.25 under the $40 cap.
+- The Qwen cap is raised to **$45**, so the exploratory tail is not cut. The confirmatory dimensions run first and were safe either way.
+- Gemma now tracks ≈ $30 (cap $85), so the expected Phase-1 total is ≈ $70, well under the user-approved ≈ $110 (option A).
