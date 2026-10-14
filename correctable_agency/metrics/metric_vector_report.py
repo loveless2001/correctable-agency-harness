@@ -12,7 +12,7 @@ import random
 from collections import defaultdict
 from pathlib import Path
 
-METRICS = ("ACA", "USMR_disposition", "USMR_realized", "ICR", "IE", "utility", "exposure")
+from correctable_agency.metrics.action_predicate_scorer import METRIC_NAMES as METRICS
 EXCLUDED = ("infra_error", "budget_stop", "deadline")
 BOOT = 2000
 
