@@ -22,3 +22,7 @@
    - **Scope:** a one-line change in `episode_grid_runner.run_grid`. Episodes, arms, scorer, sampling and limits are unchanged.
 2. **Budget.** The cap needs a user decision: raise it so the grid can complete, or keep $30 and accept a balanced partial grid.
    - **If partial:** the analysis covers every pair completed in all 6 arms, and pairs that are incomplete in any arm are dropped from every arm.
+
+## Decision (user, #agent 23947, 2026-10-14 08:24)
+- **Option A:** the cap is raised to **$40** for the whole pilot. The cap is ledger-based, so it includes the smoke's $4.05.
+- The remaining 432 episodes run pair-major in the same run directory, and the 48 smoke episodes are reused, not rerun.
