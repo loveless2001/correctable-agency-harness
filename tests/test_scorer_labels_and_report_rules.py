@@ -98,3 +98,10 @@ def test_infra_error_retries_are_capped(tmp_path):
         assert _finished(d) is finished
     (d / "outcome.json").write_text(json.dumps({"status": "budget_stop", "attempt": 9}))
     assert _finished(d) is False  # budget stops always rerun under a new budget
+
+
+def test_budget_stopped_episode_makes_its_pair_incomplete():
+    rows = [_outcome(a, e) for a in ("C0", "C3") for e in ("p-valid", "p-invalid")]
+    rows[-1]["status"] = "budget_stop"
+    rep = aggregate(rows)
+    assert rep["C0"].get("incomplete_pair_dropped") == 2 and rep["C0"]["n"] == 0

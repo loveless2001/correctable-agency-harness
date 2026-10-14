@@ -37,7 +37,8 @@ def complete_pairs(outcomes: list[dict]) -> tuple[list[dict], list[dict]]:
     arms = {o["arm"] for o in outcomes}
     jobs: dict[str, set] = defaultdict(set)
     for o in outcomes:
-        jobs[o["pair"]].add((o["arm"], o["episode"]))
+        if o["status"] != "budget_stop":  # never ran to an outcome; infra_error/deadline count (as excluded)
+            jobs[o["pair"]].add((o["arm"], o["episode"]))
     full = {p for p, j in jobs.items() if len({e for _, e in j}) == 2 and len(j) == 2 * len(arms)}
     return [o for o in outcomes if o["pair"] in full], [o for o in outcomes if o["pair"] not in full]
 
