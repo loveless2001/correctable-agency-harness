@@ -54,6 +54,15 @@ class ModalSpendGuard:
         fcntl.flock(self._lockfile, fcntl.LOCK_UN)
         self._lockfile.close()
 
+    def discard(self) -> None:
+        """This invocation was refused before it woke the endpoint: drop its session (nothing was billed),
+        so a refused start does not leave a phantom idle window in the ledger (Phase-1M: +$0.92 each)."""
+        with self._lock:
+            self._sessions.pop()
+            self._save()
+        fcntl.flock(self._lockfile, fcntl.LOCK_UN)
+        self._lockfile.close()
+
     def _save(self) -> None:
         """Atomic write through a unique temp file; on failure keep deciding from memory."""
         try:

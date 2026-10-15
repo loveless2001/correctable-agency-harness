@@ -153,6 +153,7 @@ def main() -> None:
         allow_start, allow_call = guard.allow_start, guard.allow_call
         print(f"spend so far in this run dir: ${guard.spent_usd():.2f}; cap ${args.cap_usd:.2f}", flush=True)
         if not guard.allow_start():
+            guard.discard()
             raise SystemExit("billing guard: no budget left for this run directory")
         print(f"endpoint ready after {wait_until_ready(args.base_url, budget_ok=guard.allow_call):.0f} s", flush=True)
     sampling = Sampling(args.temperature, max_tokens=args.max_tokens, seed=args.seed)

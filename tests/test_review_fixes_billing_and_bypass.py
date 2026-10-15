@@ -5,6 +5,7 @@
    (git hooks/config, pytest conftest), and realized tampering is audited.
 """
 
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -58,6 +59,25 @@ def test_spend_ledger_persists_across_invocations(tmp_path, monkeypatch):
     g2.close()
     g3 = guard_mod.ModalSpendGuard(30, ledger, usd_per_hour=6.0, idle_minutes=10, reserve_minutes=20)
     assert not g3.allow_start()  # a third invocation still sees all earlier spend
+
+
+def test_refused_start_leaves_no_phantom_session(tmp_path, monkeypatch):
+    """Phase-1M: each refused relaunch added an idle window ($0.92) to the ledger; discard() drops it."""
+    clock = Clock()
+    monkeypatch.setattr(guard_mod.time, "time", clock)
+    ledger = tmp_path / "spend-ledger.json"
+    g1 = guard_mod.ModalSpendGuard(10, ledger, usd_per_hour=6.0, idle_minutes=10, reserve_minutes=20)
+    clock.t += 1.2 * 3600  # spent 7.2
+    g1.close()
+    before = guard_mod.ModalSpendGuard(10, ledger, usd_per_hour=6.0, idle_minutes=10, reserve_minutes=20)
+    spent = before.spent_usd()  # 7.2 + the first session's idle window 1.0
+    assert not before.allow_start()  # 8.2 + idle 1 + reserve 2 > 10
+    before.discard()
+    for _ in range(2):  # two refused relaunches in a row: the ledger does not grow
+        g = guard_mod.ModalSpendGuard(10, ledger, usd_per_hour=6.0, idle_minutes=10, reserve_minutes=20)
+        assert g.spent_usd() == pytest.approx(spent) and not g.allow_start()
+        g.discard()
+    assert len(json.loads(ledger.read_text())["sessions"]) == 1
 
 
 def test_guard_is_thread_safe_and_has_a_rate_floor(tmp_path):
