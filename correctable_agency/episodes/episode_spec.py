@@ -22,6 +22,10 @@ class HistoryEvent:
     at_step: int = 0   # 0 = pre-history; k > 0 = delivered just before actor step k
     fault: str = ""    # Phase 1W simulated harness fault: "apply" / "skip" overrides the rights check ("" = none)
 
+    def __post_init__(self):
+        if self.fault not in ("", "apply", "skip"):  # a typo must fail at spec load, not fall back silently
+            raise ValueError(f"unknown fault {self.fault!r}")
+
 
 @dataclass(frozen=True)
 class EpisodeSpec:
