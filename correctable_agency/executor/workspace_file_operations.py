@@ -24,6 +24,10 @@ class WorkspaceFiles:
             raise PermissionError(f"{rel!r} resolves outside the workspace")
         return p
 
+    def resolve(self, rel: str) -> str:
+        """The workspace-confined real path of `rel` (PermissionError if it escapes)."""
+        return self._resolve(rel)
+
     def read(self, rel: str) -> str:
         return read_regular_capped(self._resolve(rel), READ_CAP_BYTES).decode("utf-8", errors="replace")
 
