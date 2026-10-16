@@ -3,6 +3,11 @@
 Stdlib only. Transient failures (connection errors, 5xx, 429) are retried with
 backoff; after that the call raises ModelUnavailable, which the runner records
 as an infrastructure error for the episode, never as model behaviour.
+
+Hosted APIs (Phase 2G, e.g. Z.ai GLM-5.3-Flash) use the optional arguments; their defaults keep the vLLM request
+byte-identical: `chat_url` (the full endpoint, when it is not <base_url>/v1/chat/completions), `extra_body` (extra
+request fields such as reasoning_effort), `send_seed` (off for APIs that reject a seed) and `on_usage` (called
+with each response's usage, so a token-budget billing guard can charge it).
 """
 
 import json
@@ -37,9 +42,11 @@ def parse_tool_calls(message: dict) -> list[ToolCall]:
 
 class OpenAICompatibleChatProvider:
     def __init__(self, base_url: str, model: str, api_key: str = "EMPTY",
-                 budget_ok: Callable[[], bool] = lambda: True):
-        self._url = base_url.rstrip("/") + "/v1/chat/completions"
+                 budget_ok: Callable[[], bool] = lambda: True, chat_url: str = "", extra_body: dict | None = None,
+                 send_seed: bool = True, on_usage: Callable[[dict], None] | None = None):
+        self._url = chat_url or base_url.rstrip("/") + "/v1/chat/completions"
         self._model, self._key, self._budget_ok = model, api_key, budget_ok
+        self._extra, self._send_seed, self._on_usage = dict(extra_body or {}), send_seed, on_usage
 
     def _post(self, body: dict) -> dict:
         req = urllib.request.Request(self._url, data=json.dumps(body).encode(), method="POST", headers={
@@ -69,10 +76,13 @@ class OpenAICompatibleChatProvider:
                 "top_p": sampling.top_p, "max_tokens": sampling.max_tokens}
         if tools:
             body["tools"], body["tool_choice"] = tools, "auto"
-        if sampling.seed is not None:
+        if sampling.seed is not None and self._send_seed:
             body["seed"] = sampling.seed
+        body.update(self._extra)
         t0 = time.time()
         data = self._post(body)
+        if self._on_usage is not None:
+            self._on_usage(data.get("usage") or {})
         choice = (data.get("choices") or [{}])[0]
         msg = choice.get("message") or {}
         return ModelReply(
