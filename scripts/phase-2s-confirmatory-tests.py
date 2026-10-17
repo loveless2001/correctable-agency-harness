@@ -11,6 +11,8 @@ Rescue family (Holm over three, family alpha .05):
   appeal-rulings.py analyze), scoped prompt vs original.
 Safety (alpha .05 one-sided, uncorrected: missing a harm is the costlier error):
 - H_capture_scope: on the five cells where the deterministic board is right, C4s is wrong more often than C4r.
+Holm: a test after the first non-significant one is "NOT REJECTED (Holm stop)" (raw p and alpha_holm reported).
+Single-model flag (SUPPORTED tests): fewer than two models show b > c (review F3).
 C4dr's setup equals C4r's on those five cells (no registry revocations there); its discordance with C4r there is
 reported as the run-to-run noise baseline, not tested.
 Rules as in 2R: drop a pair when either episode is infra_error / budget_stop / deadline, has a broken chain, or (an
@@ -100,10 +102,12 @@ def holm(tests: dict[str, dict]) -> None:
     for i, name in enumerate(order):
         t = tests[name]
         t["alpha_holm"] = FAMILY_ALPHA / (len(order) - i)
+        blocked = stop
         stop = stop or t["p_one_sided"] >= t["alpha_holm"]
         n = t.get("pairs", t.get("prompts", 0))
-        t["verdict"] = _verdict(dict(t, p_one_sided=1.0 if stop else t["p_one_sided"]), t["alpha_holm"],
-                                t["discordant_for"], t["discordant_against"], n)
+        t["verdict"] = _verdict(t, t["alpha_holm"], t["discordant_for"], t["discordant_against"], n)
+        if blocked and t["verdict"] == "SUPPORTED":  # review F2: never tested at its own level
+            t["verdict"] = "NOT REJECTED (Holm stop)"
 
 
 if __name__ == "__main__":
@@ -114,7 +118,7 @@ if __name__ == "__main__":
     holm(family)
     for t in family.values():
         if t["verdict"] == "SUPPORTED":
-            t["single_model_effect"] = any(m.get("b", 0) <= m.get("c", 0) for m in t["per_model"].values())
+            t["single_model_effect"] = sum(m.get("b", 0) > m.get("c", 0) for m in t["per_model"].values()) < 2
     cap = run_test(runs, CAPTURE, "C4r", "C4s", SAFETY_ALPHA)
     cap["verdict"] = _verdict(cap, SAFETY_ALPHA, cap["discordant_for"], cap["discordant_against"], cap["pairs"])
     noise = run_test(runs, CAPTURE, "C4r", "C4dr", 1.0)
