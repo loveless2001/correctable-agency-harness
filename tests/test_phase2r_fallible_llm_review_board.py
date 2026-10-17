@@ -44,7 +44,7 @@ def test_parse_decision():
 
 def test_c4r_differs_from_c4_only_by_llm_review():
     assert replace(ARMS["C4r"], name="C4", llm_review=False) == ARMS["C4"]
-    assert not any(a.llm_review for n, a in ARMS.items() if n != "C4r")
+    assert not any(a.llm_review for n, a in ARMS.items() if n not in ("C4r", "C4s", "C4dr"))
 
 
 def test_grid_is_byte_identical_copies_of_frozen_grids():

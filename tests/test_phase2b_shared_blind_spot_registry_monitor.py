@@ -113,7 +113,7 @@ def test_older_specs_have_no_new_fields_and_registry_equals_record(tmp_path):
 def test_c4d_differs_from_c4_only_by_registry():
     c4, c4d = ARMS["C4"], ARMS["C4d"]
     assert replace(c4d, name="C4", registry=False) == c4
-    assert not any(a.registry for n, a in ARMS.items() if n != "C4d")
+    assert not any(a.registry for n, a in ARMS.items() if n not in ("C4d", "C4dr"))
 
 
 @pytest.fixture(scope="module")
