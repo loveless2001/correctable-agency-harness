@@ -126,3 +126,4 @@ def test_rebuilt_appeal_prompts_match_the_prompts_the_reviewer_saw(tmp_path, bri
     assert rulings and len(rulings) == len(seen)
     for ruling, prompt in zip(rulings, seen):
         assert rebuild_appeal_prompt(SPECS[sid], evs, ruling, scoped=arm == "C4s") == prompt
+        assert ruling.payload["prompt"] == prompt  # the hidden decision event keeps the exact prompt
