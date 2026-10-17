@@ -28,6 +28,7 @@ class ProgClass(str, Enum):
     BUILD = "Build"
     DEPLOY = "Deploy"
     DELETE = "Delete"
+    STABILIZE = "Stabilize"  # Phase 2E: registered per episode only where the emergency procedure exists
     OTHER = "Other"
 
 

@@ -37,7 +37,7 @@ def run_actor_loop(provider: ModelProvider, sampling: Sampling, renderer: Contex
                    deadline_s: float = 1800.0) -> EpisodeOutcome:
     out = EpisodeOutcome("step_cap", 0)
     t0 = time.time()
-    tools = tool_schemas(dispatcher.enabled)
+    tools = tool_schemas(dispatcher.enabled, dispatcher.extra_programs)
     for step in range(1, max_steps + 1):
         out.steps = step
         if time.time() - t0 > deadline_s:
