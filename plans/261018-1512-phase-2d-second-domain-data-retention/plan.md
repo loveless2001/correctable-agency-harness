@@ -52,4 +52,4 @@ Per model 576 episodes; Qwen + Gemma 1,152. GLM skipped (≈4.7M tokens left). G
 5. [x] Invariance capture after (and after review fixes); full pytest; Lean recheck.
 6. [x] Code review: PASS-WITH-FIXES; F1–F8 fixed or disclosed.
 7. [x] Prereg frozen; user GO (25194); corrected cost posted.
-8. [ ] Smokes (`-00`) → gate → full grids; frozen scripts; report; write-up/page.
+8. [x] Smokes (`-00`) → gate → full grids; frozen scripts (all six REPLICATED); report (b6bfecb); write-up/page.
