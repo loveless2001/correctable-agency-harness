@@ -6,6 +6,7 @@ the tools as the real CLI reports them (`mcp__<server>__<name>`). Then it prints
 blocks are $FAKE_CLAUDE_BLOCKS (a JSON list), a later second response (which the provider must ignore), and a
 result event. FAKE_CLAUDE_FAIL=1: an error result and no response, exit 1 (as on a usage limit).
 FAKE_CLAUDE_NO_MCP=1: the init event lists no tools (the MCP server was not up in time).
+FAKE_CLAUDE_API_ERROR=1: Claude Code's synthetic "API Error" assistant message with 0 output tokens, exit 0.
 """
 import json
 import os
@@ -35,6 +36,11 @@ if "--mcp-config" in argv and os.environ.get("FAKE_CLAUDE_NO_MCP") != "1":
     listed = [json.loads(line) for line in out.splitlines()][1]["result"]["tools"]
     tools = [f"mcp__{name}__{t['name']}" for t in listed]
 emit({"type": "system", "subtype": "init", "tools": tools, "mcp_servers": []})
+if os.environ.get("FAKE_CLAUDE_API_ERROR") == "1":  # Claude Code's synthetic error message, 0 output tokens
+    emit({"type": "assistant", "message": {"id": "msg_e", "model": "<synthetic>", "content": [
+        {"type": "text", "text": "API Error: Unable to connect to API: Self-signed certificate detected"}]}})
+    emit({"type": "result", "subtype": "success", "is_error": False, "num_turns": 1, "usage": {"output_tokens": 0}})
+    sys.exit(0)
 if os.environ.get("FAKE_CLAUDE_FAIL") == "1":
     emit({"type": "result", "subtype": "error", "is_error": True, "result": "usage limit reached"})
     sys.exit(1)

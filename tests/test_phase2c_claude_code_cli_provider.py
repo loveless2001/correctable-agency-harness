@@ -107,6 +107,16 @@ def test_cli_failures_retry_then_end_as_infrastructure_errors(fake, monkeypatch)
     assert len(runs()) == cli_mod.RETRIES
 
 
+def test_claude_code_api_error_messages_are_infrastructure_errors_not_replies(fake, monkeypatch):
+    bin_, runs = fake
+    monkeypatch.setenv("FAKE_CLAUDE_API_ERROR", "1")
+    with pytest.raises(ModelUnavailable, match="Self-signed certificate"):
+        _complete(bin_, monkeypatch, [])
+    assert len(runs()) == cli_mod.RETRIES
+    assert not cli_mod.synthetic_api_error([{"type": "text", "text": "API Error is what I saw in the log"}],
+                                           {"usage": {"output_tokens": 12}})  # the model's own words stay a reply
+
+
 def test_billing_guard_refusal_stops_before_any_cli_run(fake, monkeypatch):
     bin_, runs = fake
     with pytest.raises(BudgetExhausted):
