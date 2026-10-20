@@ -111,6 +111,9 @@ def _provider(args, budget_ok: Callable[[], bool], on_usage: Callable[[dict], No
     if args.provider.startswith("stub-"):
         from correctable_agency.models.heuristic_policy_stub_provider import HeuristicPolicyStubProvider
         return HeuristicPolicyStubProvider(args.provider.removeprefix("stub-"))
+    if args.provider == "claude-cli":  # Claude on the subscription through `claude -p` (Phase 2C)
+        from correctable_agency.models.claude_code_cli_provider import ClaudeCodeCliProvider
+        return ClaudeCodeCliProvider(args.model, args.claude_effort, budget_ok=budget_ok, on_usage=on_usage)
     from correctable_agency.models.openai_compatible_chat_provider import OpenAICompatibleChatProvider
     if not args.api_key_env:  # self-hosted vLLM: unchanged request
         return OpenAICompatibleChatProvider(args.base_url, args.model, budget_ok=budget_ok)
@@ -169,6 +172,7 @@ def main() -> None:
     p.add_argument("--token-budget", action="append", default=[], help="PATH:TOKENS ledger cap (repeatable)")
     p.add_argument("--call-token-reserve", type=int, default=40_000, help="worst-case tokens of one call")
     p.add_argument("--episode-token-reserve", type=int, default=400_000, help="tokens reserved per episode in flight")
+    p.add_argument("--claude-effort", default="high", help="--effort for --provider claude-cli")
     args = p.parse_args()
     if args.env_file:
         load_env_file(args.env_file)
