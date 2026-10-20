@@ -113,6 +113,13 @@ class AppServer:
     def unsubscribe(self, thread_id: str) -> None:
         self._threads.pop(thread_id, None)
 
+    def send_request_no_reply(self, method: str, params: dict) -> None:
+        """A request whose reply nobody waits for (it is dropped by the reader)."""
+        with self._lock:
+            self._next += 1
+            rid = f"noreply-{self._next}"
+        self._send({"id": rid, "method": method, "params": params})
+
     def notify_unsubscribe(self, thread_id: str) -> None:
         """Let app-server unload the finished thread (best effort; the reply is not awaited)."""
         try:

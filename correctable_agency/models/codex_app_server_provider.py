@@ -4,22 +4,25 @@ One long-lived `codex app-server` (JSON-RPC over stdio) per provider. Each call 
 - The harness system prompt is the thread's `baseInstructions`, which replaces Codex's own instructions. The rendered
   user message is the turn's only input.
 - The call's tools are the thread's `dynamicTools`, so the model sees them natively under their own names and
-  schemas. A call reaches us as an `item/tool/call` request. We never answer it: the turn is interrupted there, so
-  Codex never executes anything. Codex sends `parallel_tool_calls: false`, so that call is the model's whole response.
+  schemas. The reply is read from the thread's raw events (`experimentalRawEvents`): the model's own output items in
+  order, then the response's usage. Codex's `item/tool/call` request for the call is never answered, and the turn is
+  interrupted once the response is complete, so nothing runs and no second request is made. (Interrupting at the
+  tool call itself loses the usage when the response is still streaming: the first calibration smoke.) Codex sends
+  `parallel_tool_calls: false`, so a response holds at most one call.
 - Codex is otherwise switched off. A frozen model catalog (codex_harness_model_catalog.json, tool_mode "direct")
   removes the code-mode `exec` wrapper, the sub-agent tools and tool search. `environments: []` removes shell and
   apply_patch. The CONFIG overrides turn off web search, skills, apps, plugins, memories, hooks, goals, and the
   permissions, environment and collaboration-mode blocks. CODEX_HOME is a dedicated directory with its own ChatGPT
   login (scripts/codex-harness-home-device-code-login.py) and no config, AGENTS.md or MCP servers. What Codex sends
   is checked against a mock Responses server (scripts/codex-app-server-request-audit-against-mock-responses.py).
-- One Codex tool remains: `request_user_input`. Codex itself answers "unavailable in Default mode" without telling
-  the client. A response that ends with neither a harness call nor a final message can only be that call. It is
-  reported as a call to the tool `request_user_input`, which the dispatcher rejects as unknown.
+- One Codex tool remains: `request_user_input` (Codex itself answers "unavailable in Default mode"). A call to it is a
+  raw function_call like any other and reaches the dispatcher, which rejects it as an unknown tool.
 
 Known differences from the vLLM / hosted-API runs (to be stated with any result): one tool call per response; no
 temperature or seed; reasoning is not returned; whatever the ChatGPT backend adds server-side is not visible.
 """
 
+import json
 import os
 import queue
 import tempfile
@@ -46,6 +49,19 @@ def dynamic_tools(tools: list[dict]) -> list[dict]:
     """OpenAI-format tools as app-server dynamic tools (same names, descriptions and schemas)."""
     return [{"type": "function", "name": t["function"]["name"], "description": t["function"].get("description", ""),
              "inputSchema": t["function"].get("parameters") or {"type": "object", "properties": {}}} for t in tools]
+
+
+def raw_call(item: dict, i: int) -> ToolCall:
+    """A raw Responses function_call as the gateway's ToolCall; malformed JSON arguments are a parse error, as on
+    the API path."""
+    cid, name, raw = item.get("call_id") or f"call_{i}", str(item.get("name") or ""), item.get("arguments") or ""
+    try:
+        args = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        return ToolCall(cid, name, {}, f"unparseable arguments: {raw!r}"[:500])
+    if not isinstance(args, dict):
+        return ToolCall(cid, name, {}, f"arguments are not an object: {raw!r}"[:500])
+    return ToolCall(cid, name, args)
 
 
 def usage_of(last: dict, rate_limits: dict) -> dict:
@@ -86,20 +102,13 @@ class CodexAppServerProvider:
         thread = server.request("thread/start", {
             "model": self._model, "baseInstructions": system, "dynamicTools": dynamic_tools(tools),
             "environments": [], "ephemeral": True, "sandbox": "read-only", "approvalPolicy": "never",
-            "cwd": self._cwd})["thread"]
+            "cwd": self._cwd, "experimentalRawEvents": True})["thread"]
         events = server.subscribe(thread["id"])
         try:
             turn = server.request("turn/start", {"threadId": thread["id"], "effort": self._effort,
                                                  "input": [{"type": "text", "text": prompt}]})["turn"]
-            texts, calls, final, usage, deadline, interrupted = [], [], False, None, time.time() + TIMEOUT_S, False
+            texts, calls, usage, deadline, interrupted = [], [], None, time.time() + TIMEOUT_S, False
             served = thread.get("model") or self._model
-
-            def interrupt():
-                nonlocal interrupted
-                if not interrupted:
-                    interrupted = True
-                    server._send({"id": f"interrupt-{turn['id']}", "method": "turn/interrupt",
-                                  "params": {"threadId": thread["id"], "turnId": turn["id"]}})
             while True:
                 try:
                     m = events.get(timeout=max(1.0, deadline - time.time()))
@@ -108,24 +117,22 @@ class CodexAppServerProvider:
                 if m is None:
                     raise AppServerError("app-server exited during the turn")
                 method, params = m.get("method"), m.get("params") or {}
-                if method == "item/tool/call" and not calls:  # the model's call: never answered
-                    args = params.get("arguments")
-                    calls.append(ToolCall(params.get("callId") or "call_0", str(params.get("tool") or ""), args)
-                                 if isinstance(args, dict) else
-                                 ToolCall(params.get("callId") or "call_0", str(params.get("tool") or ""), {},
-                                          f"arguments are not an object: {args!r}"[:500]))
-                    interrupt()
-                elif "id" in m and method:
-                    server.refuse(m["id"])  # approvals etc.: nothing else may run
-                elif method == "item/completed" and (params.get("item") or {}).get("type") == "agentMessage":
-                    item = params["item"]
-                    texts.append(item.get("text") or "")
-                    final = final or item.get("phase") != "commentary"
-                elif method == "thread/tokenUsage/updated" and usage is None:  # the first response is complete
-                    usage = (params.get("tokenUsage") or {}).get("last") or {}
-                    if not calls and not final:  # neither a harness call nor an answer: Codex's own tool
-                        calls.append(ToolCall("builtin_0", BUILTIN_CALL, {}))
-                        interrupt()
+                if "id" in m and method:  # item/tool/call is never answered (nothing runs); anything else refused
+                    if method != "item/tool/call":
+                        server.refuse(m["id"])
+                elif method == "rawResponseItem/completed" and usage is None:  # the model's own output, in order
+                    item = params.get("item") or {}
+                    if item.get("type") == "function_call":
+                        calls.append(raw_call(item, len(calls)))
+                    elif item.get("type") == "message" and item.get("role") == "assistant":
+                        texts += [c.get("text") or "" for c in item.get("content") or [] if c.get("type") == "output_text"]
+                elif method == "rawResponse/completed" and usage is None:  # the first response is complete
+                    usage = params.get("usage") or {}
+                    if calls and not interrupted:  # the call is pending, unanswered: stop before anything runs
+                        interrupted = True
+                        server.send_request_no_reply("turn/interrupt", {"threadId": thread["id"], "turnId": turn["id"]})
+                elif method == "error" and params.get("willRetry") and usage is None:  # Codex re-sends the request
+                    texts, calls = [], []
                 elif method == "model/rerouted":  # the backend answered with another model: record which
                     served = params.get("toModel") or served
                 elif method == "turn/completed":

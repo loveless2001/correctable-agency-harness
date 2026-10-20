@@ -2,12 +2,16 @@
 
 Each turn plays the next scenario of $FAKE_CODEX_SCENARIOS (JSON list; the last one repeats), counted across
 restarts through the record file $FAKE_CODEX_RECORD, where every message in and the argv/env are logged:
-- call:    the model calls `read_file` (an item/tool/call request); usage and turn/completed only after interrupt
-- badargs: same, with a non-object `arguments`
-- text:    a final agentMessage, usage, turn/completed "completed"
-- builtin: usage with no item (Codex answered its own request_user_input); turn/completed after interrupt
-- fail:    turn/completed "failed"
-- crash:   exit right after turn/start
+Raw events as Codex sends them with experimentalRawEvents (the model's output items, then rawResponse/completed
+with usage); turns that end on interrupt send thread/tokenUsage/updated only if "usage still due".
+- call:     commentary text + a `read_file` call (also an item/tool/call request), then the response completes
+- badargs:  same, with malformed JSON arguments
+- text:     a final message; turn/completed "completed"
+- builtin:  a request_user_input call, the response completes, then a second response starts (must be ignored)
+- retry:    a call, then a stream error with willRetry, then as call (the first call must be dropped)
+- nousage:  a call, and the turn ends without rawResponse/completed
+- fail:     turn/completed "failed"
+- crash:    exit right after turn/start
 - rerouted: model/rerouted to gpt-6-luna, then as call
 """
 
@@ -41,6 +45,19 @@ def usage(tid: str, turn: str) -> None:
                                                             "tokenUsage": {"total": USAGE, "last": USAGE}}})
 
 
+def raw_item(tid: str, turn: str, item: dict) -> None:
+    send({"method": "rawResponseItem/completed", "params": {"threadId": tid, "turnId": turn, "item": item}})
+
+
+def raw_done(tid: str, turn: str) -> None:
+    send({"method": "rawResponse/completed", "params": {"threadId": tid, "turnId": turn, "responseId": "resp",
+                                                        "usage": USAGE}})
+
+
+def call_item(name: str, arguments: str, call_id: str) -> dict:
+    return {"type": "function_call", "id": f"fc-{call_id}", "name": name, "arguments": arguments, "call_id": call_id}
+
+
 def done(tid: str, turn: str, status: str, error=None) -> None:
     send({"method": "turn/completed", "params": {"threadId": tid, "turn": {"id": turn, "status": status,
                                                                           "error": error, "items": []}}})
@@ -71,19 +88,35 @@ def main() -> None:
                 send({"method": "model/rerouted", "params": {"threadId": tid, "turnId": turn, "fromModel": "gpt-6.1-sol",
                                                              "toModel": "gpt-6-luna", "reason": "capacity"}})
                 scenario = "call"
+            raw_item(tid, turn, {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "x"}]})
+            if scenario == "retry":  # a stream that drops after the call: Codex reconnects and re-sends
+                raw_item(tid, turn, call_item("read_file", '{"path": "stale"}', "call-stale"))
+                send({"method": "error", "params": {"threadId": tid, "turnId": turn, "willRetry": True,
+                                                    "error": {"message": "Reconnecting... 1/5"}}})
+                scenario = "call"
             if scenario in ("call", "badargs"):
-                args = {"path": "notes/plan.md"} if scenario == "call" else "-la"
+                raw_item(tid, turn, {"type": "message", "role": "assistant", "phase": "commentary",
+                                     "content": [{"type": "output_text", "text": "Checking the plan. "}]})
+                args = '{"path": "notes/plan.md"}' if scenario == "call" else '{"args": -la}'
+                raw_item(tid, turn, call_item("read_file", args, f"call-{tid}"))
                 send({"id": f"srv-{tid}", "method": "item/tool/call", "params": {
-                    "threadId": tid, "turnId": turn, "callId": f"call-{tid}", "tool": "read_file", "arguments": args}})
+                    "threadId": tid, "turnId": turn, "callId": f"call-{tid}", "tool": "read_file", "arguments": {}}})
+                raw_done(tid, turn)  # the response completes after the call was dispatched (the smoke's race)
                 waiting[turn] = (tid, True)
             elif scenario == "text":
-                send({"method": "item/completed", "params": {"threadId": tid, "turnId": turn, "item": {
-                    "type": "agentMessage", "id": "msg", "text": "all clear", "phase": "final_answer"}}})
+                raw_item(tid, turn, {"type": "message", "role": "assistant", "phase": "final_answer",
+                                     "content": [{"type": "output_text", "text": "all clear"}]})
+                raw_done(tid, turn)
                 usage(tid, turn)
                 done(tid, turn, "completed")
-            elif scenario == "builtin":
-                usage(tid, turn)
+            elif scenario == "builtin":  # Codex answers request_user_input itself and asks the model again at once
+                raw_item(tid, turn, call_item("request_user_input", '{"questions": []}', f"call-{tid}"))
+                raw_done(tid, turn)
+                raw_item(tid, turn, call_item("finish", '{"summary": "second response"}', "call-second"))
                 waiting[turn] = (tid, False)
+            elif scenario == "nousage":
+                raw_item(tid, turn, call_item("read_file", '{"path": "x"}', f"call-{tid}"))
+                done(tid, turn, "interrupted")
             elif scenario == "fail":
                 done(tid, turn, "failed", {"message": "stream disconnected"})
         elif method == "turn/interrupt":

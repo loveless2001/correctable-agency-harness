@@ -74,6 +74,7 @@ def test_thread_carries_the_harness_prompt_and_tools_with_codex_switched_off(fak
     assert p["baseInstructions"] == MESSAGES[0]["content"] and p["dynamicTools"] == dynamic_tools(TOOLS)
     assert p["environments"] == [] and p["ephemeral"] is True and p["sandbox"] == "read-only"
     assert p["approvalPolicy"] == "never" and p["model"] == "gpt-6.1-sol" and "developerInstructions" not in p
+    assert p["experimentalRawEvents"] is True
     (turn,) = _sent(log, "turn/start")
     assert turn["params"]["input"] == [{"type": "text", "text": MESSAGES[1]["content"]}]
     assert turn["params"]["effort"] == "high"
@@ -82,11 +83,12 @@ def test_thread_carries_the_harness_prompt_and_tools_with_codex_switched_off(fak
                                        "inputSchema": TOOLS[0]["function"]["parameters"]}
 
 
-def test_the_models_call_is_never_answered_and_the_turn_is_interrupted(fake):
+def test_the_models_call_is_never_answered_and_the_turn_is_interrupted_once_the_response_is_complete(fake):
     make, log, _ = fake
     r = make(["call"]).complete(MESSAGES, TOOLS, Sampling())
     assert [(c.id, c.name, c.arguments, c.parse_error) for c in r.tool_calls] == [
         ("call-thr-1", "read_file", {"path": "notes/plan.md"}, "")]
+    assert r.text == "Checking the plan. " and usage_tokens(r.usage) == 1234
     assert r.finish_reason == "interrupted" and r.model_id == "gpt-6.1-sol"
     assert len(_sent(log, "turn/interrupt")) == 1
     assert not [m for m in log() if m.get("id") == "srv-thr-1"]  # no reply to the tool call: nothing ran
@@ -100,11 +102,23 @@ def test_a_text_answer_has_no_calls_and_is_not_interrupted(fake):
     assert not _sent(log, "turn/interrupt")
 
 
-def test_codexs_own_request_user_input_is_reported_as_that_unknown_tool(fake):
+def test_codexs_own_request_user_input_is_reported_and_the_next_response_ignored(fake):
     make, log, _ = fake
     r = make(["builtin"]).complete(MESSAGES, TOOLS, Sampling())
-    assert [c.name for c in r.tool_calls] == [BUILTIN_CALL] and r.finish_reason == "builtin_call"
-    assert len(_sent(log, "turn/interrupt")) == 1
+    assert [(c.name, c.arguments) for c in r.tool_calls] == [(BUILTIN_CALL, {"questions": []})]
+    assert r.finish_reason == "builtin_call" and len(_sent(log, "turn/interrupt")) == 1
+
+
+def test_a_reconnected_stream_keeps_only_the_resent_response(fake):
+    make, _, _ = fake
+    r = make(["retry"]).complete(MESSAGES, TOOLS, Sampling())
+    assert [(c.id, c.arguments) for c in r.tool_calls] == [("call-thr-1", {"path": "notes/plan.md"})]
+
+
+def test_a_turn_without_usage_is_an_infrastructure_error(fake):
+    make, _, _ = fake
+    with pytest.raises(ModelUnavailable, match="without token usage"):
+        make(["nousage"]).complete(MESSAGES, TOOLS, Sampling())
 
 
 def test_a_rerouted_turn_reports_the_model_that_answered(fake):
@@ -112,10 +126,10 @@ def test_a_rerouted_turn_reports_the_model_that_answered(fake):
     assert make(["rerouted"]).complete(MESSAGES, TOOLS, Sampling()).model_id == "gpt-6-luna"
 
 
-def test_non_object_arguments_are_a_parse_error(fake):
+def test_malformed_arguments_are_a_parse_error(fake):
     make, _, _ = fake
     (call,) = make(["badargs"]).complete(MESSAGES, TOOLS, Sampling()).tool_calls
-    assert call.name == "read_file" and call.arguments == {} and "not an object" in call.parse_error
+    assert call.name == "read_file" and call.arguments == {} and "unparseable arguments" in call.parse_error
 
 
 def test_a_failed_turn_is_retried_and_then_an_infrastructure_error(fake):
