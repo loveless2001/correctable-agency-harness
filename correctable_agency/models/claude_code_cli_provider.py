@@ -90,6 +90,18 @@ def parse_stream(stdout: str) -> tuple[dict, list[dict], dict]:
     return init, blocks, result
 
 
+def tool_call(i: int, block: dict) -> ToolCall:
+    """A tool_use block as the gateway's ToolCall. Malformed JSON from the model reaches us as
+    {"__unparsedToolInput": {"raw": ...}} and becomes a parse error, as unparseable arguments do on the API path."""
+    args, name = block.get("input"), str(block.get("name") or "").removeprefix(PREFIX)
+    if isinstance(args, dict) and "__unparsedToolInput" in args:
+        raw = (args["__unparsedToolInput"] or {}).get("raw", "")
+        return ToolCall(block.get("id") or f"call_{i}", name, {}, f"unparseable arguments: {raw!r}"[:500])
+    if not isinstance(args, dict):
+        return ToolCall(block.get("id") or f"call_{i}", name, {}, f"arguments are not an object: {args!r}"[:500])
+    return ToolCall(block.get("id") or f"call_{i}", name, args)
+
+
 def usage_of(result: dict) -> dict:
     """The CLI's usage in the gateway's terms (prompt = uncached + cache writes + cache reads), raw parts kept."""
     u = result.get("usage") or {}
@@ -158,10 +170,7 @@ class ClaudeCodeCliProvider:
         usage = usage_of(result)
         if self._on_usage is not None:
             self._on_usage(usage)
-        calls = [ToolCall(b.get("id") or f"call_{i}", str(b.get("name") or "").removeprefix(PREFIX),
-                          b["input"] if isinstance(b.get("input"), dict) else {},
-                          "" if isinstance(b.get("input"), dict) else f"input is not an object: {b.get('input')!r}"[:500])
-                 for i, b in enumerate(b for b in blocks if b.get("type") == "tool_use")]
+        calls = [tool_call(i, b) for i, b in enumerate(b for b in blocks if b.get("type") == "tool_use")]
         text = "".join(b.get("text") or "" for b in blocks if b.get("type") == "text")
         stops = {b.get("_stop") for b in blocks} | {result.get("stop_reason")}
         return ModelReply(text=text, tool_calls=calls, model_id=next(iter(result.get("modelUsage") or {}), self._model),

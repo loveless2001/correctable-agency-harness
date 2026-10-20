@@ -82,10 +82,13 @@ def test_tools_reach_the_cli_through_the_mcp_server_under_their_own_schemas(fake
 def test_first_response_tool_uses_become_the_gateway_tool_calls(fake, monkeypatch):
     bin_, _ = fake
     r = _complete(bin_, monkeypatch, [{"type": "text", "text": "checking"}, _use("read_file", {"path": "README.md"}, 0),
-                                      _use("run", "ls", 1), {"type": "tool_use", "id": "t2", "name": "Bash", "input": {}}])
+                                      _use("run", "ls", 1), {"type": "tool_use", "id": "t2", "name": "Bash", "input": {}},
+                                      _use("run", {"__unparsedToolInput": {"len": 29, "raw": '{"program": "ls", "args": -R}'}}, 3)])
     assert r.text == "checking" and "SECOND TURN" not in r.text and r.model_id == "claude-sonnet-5-5"
     assert [(c.id, c.name, c.arguments, bool(c.parse_error)) for c in r.tool_calls] == [
-        ("toolu_0", "read_file", {"path": "README.md"}, False), ("toolu_1", "run", {}, True), ("t2", "Bash", {}, False)]
+        ("toolu_0", "read_file", {"path": "README.md"}, False), ("toolu_1", "run", {}, True), ("t2", "Bash", {}, False),
+        ("toolu_3", "run", {}, True)]
+    assert r.tool_calls[3].parse_error.startswith("unparseable arguments") and "-R" in r.tool_calls[3].parse_error
 
 
 def test_tools_missing_from_the_session_retry_then_end_as_infrastructure_errors(fake, monkeypatch):
