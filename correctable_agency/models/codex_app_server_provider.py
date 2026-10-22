@@ -157,6 +157,8 @@ class CodexAppServerProvider:
                 text, calls, last_usage, status, model_id = self._turn(system, prompt, tools)
             except (AppServerError, OSError) as e:
                 last = str(e)[:500]
+                if self._on_usage is not None:  # a failed turn may still bill (codex audit H1): charge the full reserve
+                    self._on_usage({})
                 time.sleep(BACKOFF_S * 2 ** attempt)
                 continue
             usage = usage_of(last_usage, self._server.rate_limits if self._server else {})

@@ -41,7 +41,8 @@ def test_guard_admits_calls_only_while_the_worst_case_fits(tmp_path):
     assert g.allow_call()  # 1200 + 1000 <= 2500
     g.record({"total_tokens": 1_000})
     assert not g.allow_call()  # 2200 + 1000 > 2500
-    assert json.loads((tmp_path / "study.json").read_text()) == {"used": 2_200, "calls": 2}
+    ledger = json.loads((tmp_path / "study.json").read_text())
+    assert (ledger["used"], ledger["calls"], ledger["reserved"]) == (2_200, 2, {})
 
 
 def test_inflight_calls_of_other_threads_are_reserved(tmp_path):

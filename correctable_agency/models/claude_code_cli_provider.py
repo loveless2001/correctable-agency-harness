@@ -154,6 +154,7 @@ class ClaudeCodeCliProvider:
         for attempt in range(RETRIES):
             if not self._budget_ok():
                 raise BudgetExhausted("billing guard: no budget for another model call")
+            result: dict = {}
             try:
                 proc = subprocess.run(argv, input=prompt, capture_output=True, text=True, timeout=TIMEOUT_S,
                                       env=self._env)
@@ -171,6 +172,8 @@ class ClaudeCodeCliProvider:
                 last = f"timed out after {TIMEOUT_S} s"
             except OSError as e:
                 last = str(e)[:500]
+            if self._on_usage is not None:  # a discarded attempt still bills (codex audit H1): its own usage, else
+                self._on_usage(usage_of(result) if result.get("usage") else {})  # the full reserve
             time.sleep(BACKOFF_S * 2 ** attempt)
         raise ModelUnavailable(f"{RETRIES} attempts failed: {last}")
 

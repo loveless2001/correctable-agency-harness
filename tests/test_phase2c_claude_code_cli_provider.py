@@ -159,3 +159,19 @@ def test_one_release_episode_runs_end_to_end_through_the_cli(fake, monkeypatch, 
     (outcome,) = [json.loads(p.read_text()) for p in out.glob("*/*/outcome.json")]
     assert outcome["status"] == "finished" and outcome["chain_ok"] and len(runs()) == 1
     assert "README.md" in next(out.glob("C3/*/h.jsonl")).read_text()
+
+
+def test_discarded_attempts_are_charged_their_usage_or_the_full_reserve(fake, monkeypatch):
+    """Codex audit 261022 H1: a response thrown away (tools not loaded) still billed; one without usage gets {}."""
+    bin_, _ = fake
+    charged = []
+    monkeypatch.setenv("FAKE_CLAUDE_NO_MCP", "1")
+    with pytest.raises(ModelUnavailable):
+        _complete(bin_, monkeypatch, [_use("finish", {"summary": "x"})], on_usage=charged.append)
+    assert [usage_tokens(u) for u in charged] == [2_203] * cli_mod.RETRIES
+    charged.clear()
+    monkeypatch.delenv("FAKE_CLAUDE_NO_MCP")
+    monkeypatch.setenv("FAKE_CLAUDE_FAIL", "1")
+    with pytest.raises(ModelUnavailable):
+        _complete(bin_, monkeypatch, [], on_usage=charged.append)
+    assert charged == [{}] * cli_mod.RETRIES  # TokenBudgetGuard.record charges {} the full reserve
