@@ -68,6 +68,8 @@ class OpenAICompatibleChatProvider:
                     raise ModelUnavailable(last) from e
             except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
                 last = str(e)
+                if self._on_usage is not None:  # a lost response may still bill (codex re-review 261023): charge
+                    self._on_usage({})  # the full reserve
             time.sleep(BACKOFF_S * 2 ** attempt)
         raise ModelUnavailable(f"{RETRIES} attempts failed: {last}")
 

@@ -11,12 +11,14 @@ reserves used to live in the guard object, so two invocations could both admit a
 - allow_start(): a new episode may start only if `used + workers x episode_reserve` fits under every cap, so the
   episodes already in flight can finish.
 - allow_call(): a model call may start only if `used + this thread's call_reserve + the reserves of other calls in
-  flight` fits, counting the reserves every invocation keeps in the shared ledger (a dead process's are dropped).
-  The cap is a hard bound while each call stays within its reserve; the CLI providers set no max_tokens, so a
-  larger response is recorded in full and can pass the cap by its overshoot.
+  flight` fits, counting the reserves every invocation keeps in the shared ledger. A reserve left by a process that
+  no longer exists is charged in full (`unresolved_calls`), since its call may have been billed (codex re-review
+  261023). The cap is a hard bound while each call stays within its reserve; the CLI providers set no max_tokens,
+  so a larger response is recorded in full and can pass the cap by its overshoot.
 - record(usage): after a response, add its tokens to every ledger and release the thread's reserve. A response
   without usage is charged the full reserve. Providers also record discarded attempts (audit H1).
-A ledger that cannot be read or written makes the checks refuse: fail closed, since this is a billing guard.
+A ledger that cannot be read or written, or an existing one without `used`, makes the checks refuse: fail closed,
+since this is a billing guard.
 """
 
 import fcntl
@@ -40,18 +42,20 @@ def _write(ledger: Path, data: dict) -> None:
     os.replace(tmp, ledger)
 
 
-def _live(data: dict) -> dict[str, int]:
-    """The ledger's reserves of calls still in flight; those of a process that no longer exists are dropped."""
-    out = {}
+def _settled(data: dict) -> dict:
+    """The ledger with every reserve of a process that no longer exists charged in full: its call may have been billed
+    before the process died. Raises KeyError for an existing ledger without `used` (no balance to trust)."""
+    used, unresolved, live = int(data["used"]), int(data.get("unresolved_calls", 0)), {}
     for key, tokens in (data.get("reserved") or {}).items():
         try:
             os.kill(int(key.split(":", 1)[0]), 0)
         except ProcessLookupError:
+            used, unresolved = used + int(tokens), unresolved + 1
             continue
         except (PermissionError, ValueError):
             pass  # alive under another user, or a key we cannot parse: keep it (conservative)
-        out[key] = int(tokens)
-    return out
+        live[key] = int(tokens)
+    return {**data, "used": used, "reserved": live} | ({"unresolved_calls": unresolved} if unresolved else {})
 
 
 def usage_tokens(usage: dict) -> int | None:
@@ -122,16 +126,15 @@ class TokenBudgetGuard:
             if self._broken:
                 return False
             try:
-                data = [(ledger, cap, _read(ledger)) for ledger, cap in self.budgets]
-                fits = all(int(d.get("used", 0)) + sum(v for k, v in _live(d).items() if k != key) + self.call_reserve
-                           <= cap for _, cap, d in data)
+                data = [(ledger, cap, _settled(_read(ledger))) for ledger, cap in self.budgets]
+                fits = all(d["used"] + sum(v for k, v in d["reserved"].items() if k != key) + self.call_reserve <= cap
+                           for _, cap, d in data)
                 for ledger, _, d in data:
-                    reserved = _live(d)
                     if fits:
-                        reserved[key] = self.call_reserve  # a retry of the same call replaces, never adds
+                        d["reserved"][key] = self.call_reserve  # a retry of the same call replaces, never adds
                     else:
-                        reserved.pop(key, None)
-                    _write(ledger, {**d, "reserved": reserved})
+                        d["reserved"].pop(key, None)
+                    _write(ledger, d)
                 return fits
             except (OSError, ValueError, TypeError, KeyError):
                 return False  # fail closed
@@ -143,12 +146,10 @@ class TokenBudgetGuard:
         with self._lock, self._ledgers_locked():
             for ledger, _ in self.budgets:
                 try:
-                    data = _read(ledger)
-                    data["used"] = int(data.get("used", 0)) + tokens
+                    data = _settled(_read(ledger))
+                    data["used"] += tokens
                     data["calls"] = int(data.get("calls", 0)) + 1
-                    reserved = _live(data)
-                    reserved.pop(key, None)
-                    data["reserved"] = reserved
+                    data["reserved"].pop(key, None)
                     _write(ledger, data)
-                except (OSError, ValueError, TypeError):
+                except (OSError, ValueError, TypeError, KeyError):
                     self._broken = True  # fail closed: unrecorded tokens must stop further spend
