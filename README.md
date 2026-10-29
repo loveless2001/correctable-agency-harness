@@ -75,7 +75,7 @@ To rebuild the paper: `python3 scripts/render-paper-tables-and-figures-from-conf
 - `scripts/`: confirmatory tests, exploratory analyses and the paper's table renderer.
 - `modal_apps/`: vLLM servers on Modal.
 - `plans/`: phase plans, preregistrations and reports.
-- `docs/`: system architecture and per-phase results notes (through Phase 2P; the paper is current).
+- `docs/`: system architecture and the phase-by-phase results write-up (every test, finding and sample trace).
 - `paper/`: LaTeX source, generated tables and figure, PDF.
 - `references/`: the original working paper and an untested framework v2 draft.
 - `runs/`: confirmatory results, exploratory tables and the reviewer replay. The raw episodes are in the logs release.
